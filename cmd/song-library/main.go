@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/foreground-eclipse/song-library/cmd/migrator"
 	"github.com/foreground-eclipse/song-library/internal/config"
 	"github.com/foreground-eclipse/song-library/internal/logger"
 	"github.com/foreground-eclipse/song-library/internal/storage/postgres"
 	"github.com/gin-gonic/gin"
+
 	"go.uber.org/zap"
 )
 
@@ -17,26 +19,31 @@ func main() {
 
 	fmt.Println(cfg)
 
-	logLevel := "INFO"
+	logLevel := "DEBUG"
 	log, err := logger.NewLogger(logLevel)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
+	initLogger(log)
+
 	if log == nil {
 		fmt.Println("Logger is not properly initialized")
 		return
 	}
 
-	initLogger(log)
-
-	db, err := postgres.NewDatabase()
+	db, err := postgres.New(cfg)
 	if err != nil {
-		panic(err)
+		log.LogError("failed to create database connection", zap.Error(err))
+		os.Exit(1)
 	}
+	fmt.Print(db)
 
-	postgres.Migrate(db)
+	err = migrator.Migrate(log, cfg)
+	if err != nil {
+		log.LogError("failed to apply migrations", zap.Error(err))
+	}
 
 	router := gin.Default()
 
@@ -67,7 +74,6 @@ func initLogger(log *logger.Logger) {
 		return
 	}
 
-	log.LogInfo("This is an info message")
-	log.LogError("This is an error message")
+	log.LogInfo("logger initialized")
 
 }
