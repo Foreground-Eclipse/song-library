@@ -3,10 +3,10 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
 
 	"github.com/foreground-eclipse/song-library/internal/config"
 	_ "github.com/lib/pq"
-	"gorm.io/gorm"
 )
 
 type Storage struct {
@@ -14,7 +14,6 @@ type Storage struct {
 }
 
 type Song struct {
-	gorm.Model
 	Group       string `json:"group"`
 	Song        string `json:"song"`
 	ReleaseDate string `json:"release_date"`
@@ -22,7 +21,7 @@ type Song struct {
 	Link        string `json:"link"`
 }
 
-// New creates new instance of database
+// New initializing new database connection
 func New(cfg *config.Config) (*Storage, error) {
 	const op = "storage.postgres.New"
 
@@ -47,33 +46,7 @@ func New(cfg *config.Config) (*Storage, error) {
 	}, nil
 }
 
-// func (s *Storage) Init() error {
-// 	const op = "storage.postgres.Init"
-
-// 	if err := s.CreateSongsTable(); err != nil {
-// 		return fmt.Errorf("%s: %w", op, err)
-// 	}
-// 	return nil
-// }
-
-// func (s *Storage) CreateSongsTable() error {
-// 	const op = "storage.postgres.createSongsTable"
-
-// 	_, err := s.db.Exec(`
-// 		CREATE TABLE IF NOT EXISTS songs (
-// 			id SERIAL PRIMARY KEY,
-// 			group VARCHAR(255) NOT NULL,
-// 			song VARCHAR(255) NOT NULL,
-// 			release_date VARCHAR(255) NOT NULL,
-// 			text TEXT NOT NULL,
-// 			link VARCHAR(255) NOT NULL
-// 		);
-// 	`)
-
-// 	return fmt.Errorf("%s: %w", op, err)
-// }
-
-func (s *Storage) InsertSong(song Song) error {
+func (s *Storage) AddSong(song Song) error {
 	const op = "storage.postgres.insertSong"
 
 	_, err := s.db.Exec(`insert into songs (group, song, release_date, text, link)
@@ -83,19 +56,37 @@ func (s *Storage) InsertSong(song Song) error {
 	return fmt.Errorf("%s: %w", op, err)
 }
 
-func (s *Storage) GetSongs() ([]Song, error) {
+// GetSongs gets all the songs from database with given filter and page
+func (s *Storage) GetSongs(filter Song, page int) ([]Song, error) {
 	const op = "storage.postgres.GetSongs"
 
-	rows, err := s.db.Query("SELECT * FROM songs")
+	var query string
+
+	query = "select * from songs where "
+
+	value := reflect.ValueOf(filter)
+	for i := 0; i < value.NumField(); i++ {
+		field := value.Field(i)
+		if field.Kind() == reflect.String && field.Len() != 0 {
+			query += fmt.Sprintf("%s = '%s' AND", value.Type().Field(i).Name, field.String())
+		}
+	}
+
+	query = query[:len(query)-5]
+
+	query += " LIMIT? OFFSET?"
+
+	rows, err := s.db.Query(query, 1, (page - 1))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
 
 	var songs []Song
+
 	for rows.Next() {
 		var song Song
-		err = rows.Scan(&song.ID, &song.Group, &song.Song, &song.ReleaseDate, &song.Text, &song.Link)
+		err = rows.Scan(&song.Group, &song.Song, &song.ReleaseDate, &song.Text, &song.Link)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
@@ -110,8 +101,8 @@ func (s *Storage) UpdateSong(song Song) error {
 	_, err := s.db.Exec(`
 		UPDATE songs
 		SET group = $1, song = $2, release_date = $3, text = $4, link = $5
-		WHERE id = $6;
-	`, song.Group, song.Song, song.ReleaseDate, song.Text, song.Link, song.ID)
+		WHERE group = $6 and song = $7;
+	`, song.Group, song.Song, song.ReleaseDate, song.Text, song.Link, song.Group, song.Song)
 	return fmt.Errorf("%s: %w", op, err)
 }
 

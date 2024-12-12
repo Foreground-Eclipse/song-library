@@ -7,6 +7,7 @@ import (
 
 	"github.com/foreground-eclipse/song-library/cmd/migrator"
 	"github.com/foreground-eclipse/song-library/internal/config"
+	addsong "github.com/foreground-eclipse/song-library/internal/http-server/handlers/song_add"
 	"github.com/foreground-eclipse/song-library/internal/logger"
 	"github.com/foreground-eclipse/song-library/internal/storage/postgres"
 	"github.com/gin-gonic/gin"
@@ -33,12 +34,11 @@ func main() {
 		return
 	}
 
-	db, err := postgres.New(cfg)
+	storage, err := postgres.New(cfg)
 	if err != nil {
 		log.LogError("failed to create database connection", zap.Error(err))
 		os.Exit(1)
 	}
-	fmt.Print(db)
 
 	err = migrator.Migrate(log, cfg)
 	if err != nil {
@@ -53,6 +53,7 @@ func main() {
 			"message": "pong",
 		})
 	})
+	router.POST("/songs/add", addsong.New(log, storage))
 
 	if err := router.Run(":8080"); err != nil {
 		log.LogError("Failed to start server", zap.Error(err))

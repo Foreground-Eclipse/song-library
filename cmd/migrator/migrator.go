@@ -26,7 +26,6 @@ func Migrate(log *logger.Logger, cfg *config.Config) error {
 		cfg.DBName,
 		cfg.DBPort,
 		cfg.DBSSLMode)
-
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
@@ -50,11 +49,17 @@ func Migrate(log *logger.Logger, cfg *config.Config) error {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
+	log.LogInfo("trying to apply migrations")
+
 	err = m.Up()
-	if errors.Is(err, migrate.ErrNoChange) {
-		log.LogInfo("no migrations to apply")
+	if err != nil {
+		if errors.Is(err, migrate.ErrNoChange) {
+			log.LogInfo("no migrations to apply")
+			return fmt.Errorf("%s: %w", op, err)
+		}
 		return fmt.Errorf("%s: %w", op, err)
 	}
+	defer m.Close()
 
 	log.LogInfo("migrations applied")
 
