@@ -1,4 +1,4 @@
-package getsong
+package getcouplet
 
 import (
 	"net/http"
@@ -19,14 +19,13 @@ type Request struct {
 	Page        int    `json:"page,omitempty"`
 }
 
-type SongGetter interface {
-	GetSongs(filter postgres.Song, page int) ([]postgres.Song, error)
+type CoupletGetter interface {
+	GetCouplet(filter postgres.Song, page int) ([]postgres.Song, error)
 }
 
-// New is a handler for getting all songs with given filter
-func New(log *logger.Logger, songGetter SongGetter) gin.HandlerFunc {
+func New(log *logger.Logger, coupletGetter CoupletGetter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		const op = "handlers.song_get.New"
+		const op = "handlers.couplet_get.New"
 
 		var req Request
 		err := c.BindJSON(&req)
@@ -46,8 +45,7 @@ func New(log *logger.Logger, songGetter SongGetter) gin.HandlerFunc {
 		filter.ReleaseDate = req.ReleaseDate
 		filter.Text = req.Text
 		filter.Link = req.Link
-
-		song, err := songGetter.GetSongs(filter, req.Page)
+		couplet, err := coupletGetter.GetCouplet(filter, req.Page)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, response.Error(err))
 			log.LogError("error getting the song details at ", zap.String("op", op),
@@ -56,7 +54,6 @@ func New(log *logger.Logger, songGetter SongGetter) gin.HandlerFunc {
 
 			return
 		}
-
-		c.JSON(http.StatusOK, response.OK(song))
+		c.JSON(http.StatusOK, response.OK(couplet))
 	}
 }

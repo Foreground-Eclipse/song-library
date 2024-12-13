@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/foreground-eclipse/song-library/internal/config"
 	_ "github.com/lib/pq"
@@ -14,11 +15,12 @@ type Storage struct {
 }
 
 type Song struct {
-	Group       string `json:"group"`
-	Song        string `json:"song"`
-	ReleaseDate string `json:"release_date"`
-	Text        string `json:"text"`
-	Link        string `json:"link"`
+	Group       string   `json:"group"`
+	Song        string   `json:"song"`
+	ReleaseDate string   `json:"release_date"`
+	Text        string   `json:"text"`
+	Link        string   `json:"link"`
+	Couplet     []string `json:"couplet"`
 }
 
 // New initializing new database connection
@@ -95,6 +97,47 @@ func (s *Storage) GetSongs(filter Song, page int) ([]Song, error) {
 	return songs, nil
 }
 
+// GetCouplet gets all couplets from the song with given filter
+func (s *Storage) GetCouplet(filter Song, page int) ([]Song, error) {
+	const op = "storage.postgres.GetSongs"
+
+	var query string
+
+	query = "SELECT id, group, song, release_date, text, link FROM songs WHERE "
+
+	value := reflect.ValueOf(filter)
+	for i := 0; i < value.NumField(); i++ {
+		field := value.Field(i)
+		if field.Kind() == reflect.String && field.Len() != 0 {
+			query += fmt.Sprintf("%s = '%s' AND", value.Type().Field(i).Name, field.String())
+		}
+	}
+
+	query = query[:len(query)-5]
+
+	query += fmt.Sprintf(" LIMIT %d OFFSET %d", 1, (page - 1))
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var songs []Song
+
+	for rows.Next() {
+		var song Song
+		err = rows.Scan(&song.Group, &song.Song, &song.ReleaseDate, &song.Text, &song.Link)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+
+		song.Couplet = strings.Split(song.Text, "\n\n")
+
+		songs = append(songs, song)
+	}
+	return songs, nil
+}
 func (s *Storage) UpdateSong(song Song) error {
 	const op = "storage.postgres.UpdateSong"
 
@@ -106,9 +149,9 @@ func (s *Storage) UpdateSong(song Song) error {
 	return fmt.Errorf("%s: %w", op, err)
 }
 
-func (s *Storage) DeleteSong(id int) error {
+func (s *Storage) DeleteSong(group, song string) error {
 	const op = "storage.postgres.DeleteSong"
 
-	_, err := s.db.Exec("DELETE FROM songs WHERE id = $1", id)
+	_, err := s.db.Exec("DELETE FROM songs WHERE group = $1 and song = $2", group, song)
 	return fmt.Errorf("%s: %w", op, err)
 }

@@ -1,4 +1,4 @@
-package getsong
+package updatesong
 
 import (
 	"net/http"
@@ -19,14 +19,14 @@ type Request struct {
 	Page        int    `json:"page,omitempty"`
 }
 
-type SongGetter interface {
-	GetSongs(filter postgres.Song, page int) ([]postgres.Song, error)
+type SongUpdater interface {
+	UpdateSong(song postgres.Song) error
 }
 
-// New is a handler for getting all songs with given filter
-func New(log *logger.Logger, songGetter SongGetter) gin.HandlerFunc {
+// New updates the song and sets the given attributes
+func New(log *logger.Logger, songUpdate SongUpdater) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		const op = "handlers.song_get.New"
+		const op = "handlers.update.UpdateSong"
 
 		var req Request
 		err := c.BindJSON(&req)
@@ -37,17 +37,12 @@ func New(log *logger.Logger, songGetter SongGetter) gin.HandlerFunc {
 
 			return
 		}
+
 		log.LogInfo("got new request at", zap.String("op", op),
 			zap.String("group", req.Group),
 			zap.String("song", req.Song))
-		var filter postgres.Song
-		filter.Group = req.Group
-		filter.Song = req.Song
-		filter.ReleaseDate = req.ReleaseDate
-		filter.Text = req.Text
-		filter.Link = req.Link
-
-		song, err := songGetter.GetSongs(filter, req.Page)
+		var song postgres.Song
+		err = songUpdate.UpdateSong(song)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, response.Error(err))
 			log.LogError("error getting the song details at ", zap.String("op", op),
@@ -56,7 +51,6 @@ func New(log *logger.Logger, songGetter SongGetter) gin.HandlerFunc {
 
 			return
 		}
-
 		c.JSON(http.StatusOK, response.OK(song))
 	}
 }

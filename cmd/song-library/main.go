@@ -7,7 +7,11 @@ import (
 
 	"github.com/foreground-eclipse/song-library/cmd/migrator"
 	"github.com/foreground-eclipse/song-library/internal/config"
+	getcouplet "github.com/foreground-eclipse/song-library/internal/http-server/handlers/couplet_get"
 	addsong "github.com/foreground-eclipse/song-library/internal/http-server/handlers/song_add"
+	deletesong "github.com/foreground-eclipse/song-library/internal/http-server/handlers/song_delete"
+	getsong "github.com/foreground-eclipse/song-library/internal/http-server/handlers/song_get"
+	updatesong "github.com/foreground-eclipse/song-library/internal/http-server/handlers/song_update"
 	"github.com/foreground-eclipse/song-library/internal/logger"
 	"github.com/foreground-eclipse/song-library/internal/storage/postgres"
 	"github.com/gin-gonic/gin"
@@ -54,6 +58,10 @@ func main() {
 		})
 	})
 	router.POST("/songs/add", addsong.New(log, storage))
+	router.GET("/songs/get", getsong.New(log, storage))
+	router.GET("/songs/couplet", getcouplet.New(log, storage))
+	router.DELETE("/songs/delete", deletesong.New(log, storage))
+	router.POST("/songs/update", updatesong.New(log, storage))
 
 	if err := router.Run(":8080"); err != nil {
 		log.LogError("Failed to start server", zap.Error(err))
