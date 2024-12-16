@@ -15,12 +15,11 @@ type Storage struct {
 }
 
 type Song struct {
-	Group       string   `json:"group"`
-	Song        string   `json:"song"`
-	ReleaseDate string   `json:"release_date"`
-	Text        string   `json:"text"`
-	Link        string   `json:"link"`
-	Couplet     []string `json:"couplet"`
+	Group       string `json:"group" db:"group"`
+	Song        string `json:"song" db:"song"`
+	ReleaseDate string `json:"release_date" db:"release_date"`
+	Text        string `json:"text" db:"text"`
+	Link        string `json:"link" db:"link"`
 }
 
 // New initializing new database connection
@@ -49,109 +48,146 @@ func New(cfg *config.Config) (*Storage, error) {
 }
 
 func (s *Storage) AddSong(song Song) error {
-	const op = "storage.postgres.insertSong"
+	const op = "storage.postgres.AddSong"
 
-	_, err := s.db.Exec(`insert into songs (group, song, release_date, text, link)
+	_, err := s.db.Exec(`insert into songs ("group", song, release_date, text, link)
 	values ($1, $2, $3, $4, $5);`,
 		song.Group, song.Song, song.ReleaseDate, song.Text, song.Link)
+	fmt.Println(song.Group)
 
-	return fmt.Errorf("%s: %w", op, err)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
 }
 
 // GetSongs gets all the songs from database with given filter and page
-func (s *Storage) GetSongs(filter Song, page int) ([]Song, error) {
+func (s *Storage) GetSongs(filter Song, page int) (Song, error) {
 	const op = "storage.postgres.GetSongs"
 
-	var query string
+	// Build the base query
+	query := "SELECT \"group\", song, release_date, text, link FROM songs WHERE "
+	params := make([]interface{}, 0)
 
-	query = "select * from songs where "
+	rv := reflect.ValueOf(filter)
+	rt := rv.Type()
 
-	value := reflect.ValueOf(filter)
-	for i := 0; i < value.NumField(); i++ {
-		field := value.Field(i)
-		if field.Kind() == reflect.String && field.Len() != 0 {
-			query += fmt.Sprintf("%s = '%s' AND", value.Type().Field(i).Name, field.String())
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+		value := rv.Field(i).Interface()
+
+		if value != "" {
+			fmt.Println(field.Name)
+			query += fmt.Sprintf("\"%s\" = $%d AND ", strings.ToLower(field.Tag.Get("db")), len(params)+1)
+			params = append(params, value)
 		}
 	}
 
-	query = query[:len(query)-5]
+	// Удалить последний " AND "
+	if len(params) > 0 {
+		query = query[:len(query)-5]
+	}
 
-	query += " LIMIT? OFFSET?"
+	// Добавить пагинацию
+	query += fmt.Sprintf(" LIMIT 1 OFFSET %d", page-1)
 
-	rows, err := s.db.Query(query, 1, (page - 1))
+	// Execute the query
+	rows, err := s.db.Query(query, params...)
+	var song Song
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return song, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
 
-	var songs []Song
-
+	// Scan the results and return them
 	for rows.Next() {
-		var song Song
 		err = rows.Scan(&song.Group, &song.Song, &song.ReleaseDate, &song.Text, &song.Link)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", op, err)
+			return song, fmt.Errorf("%s: %w", op, err)
 		}
-		songs = append(songs, song)
 	}
-	return songs, nil
+
+	return song, nil
 }
 
 // GetCouplet gets all couplets from the song with given filter
-func (s *Storage) GetCouplet(filter Song, page int) ([]Song, error) {
+func (s *Storage) GetCouplet(filter Song, page int) (string, error) {
 	const op = "storage.postgres.GetSongs"
 
-	var query string
+	query := "SELECT  text FROM songs WHERE "
+	params := make([]interface{}, 0)
 
-	query = "SELECT id, group, song, release_date, text, link FROM songs WHERE "
+	rv := reflect.ValueOf(filter)
+	rt := rv.Type()
 
-	value := reflect.ValueOf(filter)
-	for i := 0; i < value.NumField(); i++ {
-		field := value.Field(i)
-		if field.Kind() == reflect.String && field.Len() != 0 {
-			query += fmt.Sprintf("%s = '%s' AND", value.Type().Field(i).Name, field.String())
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+		value := rv.Field(i).Interface()
+
+		if value != "" {
+			fmt.Println(field.Name)
+			query += fmt.Sprintf("\"%s\" = $%d AND ", strings.ToLower(field.Tag.Get("db")), len(params)+1)
+			params = append(params, value)
 		}
 	}
 
-	query = query[:len(query)-5]
+	// Удалить последний " AND "
+	if len(params) > 0 {
+		query = query[:len(query)-5]
+	}
 
-	query += fmt.Sprintf(" LIMIT %d OFFSET %d", 1, (page - 1))
+	// Добавить пагинацию
+	query += fmt.Sprintf(" LIMIT 1")
 
-	rows, err := s.db.Query(query)
+	// Execute the query
+	rows, err := s.db.Query(query, params...)
+
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return "", fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
 
-	var songs []Song
-
+	// Scan the results and return them
+	var couplet string
 	for rows.Next() {
-		var song Song
-		err = rows.Scan(&song.Group, &song.Song, &song.ReleaseDate, &song.Text, &song.Link)
+		err = rows.Scan(&couplet)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", op, err)
+			return "", fmt.Errorf("%s: %w", op, err)
 		}
-
-		song.Couplet = strings.Split(song.Text, "\n\n")
-
-		songs = append(songs, song)
 	}
-	return songs, nil
+
+	part := strings.Split(couplet, "\n")
+	fmt.Println(part[1])
+	fmt.Println(part[2])
+
+	return part[page-1], nil
 }
 func (s *Storage) UpdateSong(song Song) error {
 	const op = "storage.postgres.UpdateSong"
 
 	_, err := s.db.Exec(`
 		UPDATE songs
-		SET group = $1, song = $2, release_date = $3, text = $4, link = $5
-		WHERE group = $6 and song = $7;
-	`, song.Group, song.Song, song.ReleaseDate, song.Text, song.Link, song.Group, song.Song)
-	return fmt.Errorf("%s: %w", op, err)
+		 SET "group" = $1, song = $2, release_date = $3, text = $4, link = $5
+		  WHERE "group" = $6 and song = $7;
+	`, song.Group,
+		song.Song,
+		song.ReleaseDate,
+		song.Text,
+		song.Link,
+		song.Group,
+		song.Song)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
 }
 
 func (s *Storage) DeleteSong(group, song string) error {
 	const op = "storage.postgres.DeleteSong"
 
-	_, err := s.db.Exec("DELETE FROM songs WHERE group = $1 and song = $2", group, song)
-	return fmt.Errorf("%s: %w", op, err)
+	_, err := s.db.Exec("DELETE FROM songs WHERE \"group\" = $1 and song = $2", group, song)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
 }

@@ -18,7 +18,7 @@ type Request struct {
 }
 
 type SongDetail struct {
-	ReleaseDate string `json:"releaseDate"`
+	ReleaseDate string `json:"release_date"`
 	Text        string `json:"text"`
 	Link        string `json:"link"`
 }
@@ -29,14 +29,32 @@ type SongAdder interface {
 
 // New adds the song in database
 func New(log *logger.Logger, songAdder SongAdder) gin.HandlerFunc {
+
+	/**
+	 * @BasePath /api/v1
+	 * @Summary Adds a new song
+	 * @Description Adds a new song to the database with the given attributes.
+	 * @Tag Song
+	 * @OperationId addSong
+	 * @Param Request body required true "The song attributes to add"
+	 * @Success 200 {object} Song "The added song"
+	 * @Failure 400 {object} response "Bad request"
+	 * @Failure 500 {object} response "Internal server error"
+	 * @Router /api/v1/song/add [post]
+	 */
 	return func(c *gin.Context) {
 		const op = "handlers.song_add.New"
 
 		var req Request
-		err := c.BindJSON(&req)
-		if err != nil {
+		log.LogDebug("received request", zap.String("op", op),
+			zap.String("group", req.Group),
+			zap.String("song", req.Song),
+		)
+
+		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, response.Error(err))
-			log.LogError("error binding JSON at ", zap.String("op", op),
+			log.LogError("error happened at handler",
+				zap.String("op:", op),
 				zap.Error(err))
 
 			return

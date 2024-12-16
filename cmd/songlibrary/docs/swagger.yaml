@@ -1,0 +1,9 @@
+basePath: /api/v1
+host: localhost:8080
+info:
+  contact: {}
+  description: simple rest api representing a song library
+  title: Song library test api
+  version: "1"
+paths: {}
+swagger: "2.0"

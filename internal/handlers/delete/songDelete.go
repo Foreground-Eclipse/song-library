@@ -1,4 +1,4 @@
-package deletesong
+package songdelete
 
 import (
 	"net/http"
@@ -18,16 +18,29 @@ type SongDeleter interface {
 	DeleteSong(group, song string) error
 }
 
-// TODO: VALIDATE EVERYTHING I MADE THAT AFTER SURGERY I DONT HAVE CLEAR MIND RN
 // New deletes the song with given group and song
 func New(log *logger.Logger, songDeleter SongDeleter) gin.HandlerFunc {
+	/**
+	 * @Summary Deletes a song
+	 * @Description Deletes a song from the database by its group and name.
+	 * @Param Request body required true "The song attributes to delete"
+	 * @Success 200 {object} response "Song deleted successfully"
+	 * @Failure 400 {object} response "Bad request"
+	 * @Failure 500 {object} response "Internal server error"
+	 * @Router /song [delete]
+	 */
 	return func(c *gin.Context) {
 		const op = "handlers.song_delete.New"
 		var req Request
-		err := c.BindJSON(&req)
-		if err != nil {
+		log.LogDebug("received request", zap.String("op", op),
+			zap.String("group", req.Group),
+			zap.String("song", req.Song),
+		)
+
+		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, response.Error(err))
-			log.LogError("error binding JSON at ", zap.String("op", op),
+			log.LogError("error happened at handler",
+				zap.String("op:", op),
 				zap.Error(err))
 
 			return
@@ -36,12 +49,11 @@ func New(log *logger.Logger, songDeleter SongDeleter) gin.HandlerFunc {
 			zap.String("group", req.Group),
 			zap.String("song", req.Song))
 
-		err = songDeleter.DeleteSong(req.Group, req.Song)
+		err := songDeleter.DeleteSong(req.Group, req.Song)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, response.Error(err))
 			log.LogError("error deleting the song at ", zap.String("op", op),
 				zap.Error(err))
-			// TODO: ADD DEBUG LOG
 
 			return
 		}
